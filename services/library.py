@@ -242,10 +242,14 @@ class Library:
     """
 
     def add_user(self):
-        name = input("Enter User Name : ")
-        phone = input("Enter Phone Number : ")
-        email = input("Enter Email : ")
-        role = input("User Role : ")
+        try:
+            name = input("Enter User Name : ")
+            phone = input("Enter Phone Number : ")
+            email = input("Enter Email : ")
+            role = input("User Role : ")
+        except Exception as e:
+            print("Error : ",e)
+            
         doj = date.today()
         query = '''insert into users (name, phone, email, role, doj) values(%s,%s,%s,%s,%s)'''
         cursor.execute(query,(name,phone,email,role,doj))
