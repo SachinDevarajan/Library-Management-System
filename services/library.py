@@ -8,21 +8,22 @@ from config.db import connection, cursor
 
 from datetime import date,timedelta
 
-
 class Library:
     """
     Book Section
     """
     def add_book(self):
         self.view_shelfs()
-        title = input("Enter Book Title : ")
-        author = input("Enter Author Name : ")
-        publisher = input("Enter Publisher Name : " \
-        "")
-        category = input("Enter Category : ")
-        quantity = int(input("Enter Quantity : "))
-        shelf_id = int(input("Enter Shelf ID : "))
-
+        try:
+            title = input("Enter Book Title : ")
+            author = input("Enter Author Name : ")
+            publisher = input("Enter Publisher Name : ")
+            category = input("Enter Category : ")
+            quantity = int(input("Enter Quantity : "))
+            shelf_id = int(input("Enter Shelf ID : "))
+        except Exception as e:
+            print("Error : ",e)
+        
         query = '''select s.shelf_id, r.rack_id, rt.row_id, s.capacity
                     from shelf s join rack r on s.rack_id = r.rack_id 
                     join row_table rt on r.row_id = rt.row_id
@@ -214,6 +215,7 @@ class Library:
 
                 case _:
                     print("Invalid Choice")
+
     def remove_book(self):
         book_id = int(input("Enter Book ID : "))
         cursor.execute('select * from books where book_id = %s',(book_id,))
