@@ -16,6 +16,8 @@ A console-based **Library Management System** built with **Python**, **Object-Or
 - [Architecture](#architecture)
 - [Project Structure](#project-structure)
 - [Database Design](#database-design)
+- [Automatic Schema Creation](#automatic-schema-creation)
+- [Error Handling](#error-handling)
 - [Core Workflows](#core-workflows)
 - [Tech Stack](#tech-stack)
 - [Getting Started](#getting-started)
@@ -30,22 +32,23 @@ A console-based **Library Management System** built with **Python**, **Object-Or
 
 ## Overview
 
-This project simulates the core operations of a real-world library: managing a book catalog, tracking user records, organizing physical shelf locations, and recording the full lifecycle of borrowing and returning books. It's built to demonstrate how Python's OOP principles translate into a working, database-backed CRUD application — with a clear separation between data models, business logic, and the database layer.
+This project simulates the core operations of a real-world library: managing a book catalog, tracking user records, organizing physical shelf locations, and recording the full lifecycle of borrowing and returning books. It's built to demonstrate how Python's OOP principles translate into a working, database-backed CRUD application — with a clear separation between data models, business logic, database setup, and the connection layer.
 
 **Goals:**
 - Efficiently manage and search a book catalog
 - Maintain accurate user records
-- Track real-time book availability
+- Track real-time book availability and shelf capacity
 - Model physical library locations (Row → Rack → Shelf)
 - Record and audit borrow/return transactions
 - Persist all data reliably in MySQL
+- Set up its own database schema automatically — no manual SQL required
 
 ---
 
 ## Features
 
 ### 📚 Book Management
-Add, view, search, update, and remove books. Each record tracks title, author, publisher, category, total quantity, available quantity, and its physical shelf location.
+Add, view, search, update, and remove books. Each record tracks title, author, publisher, category, total quantity, available quantity, and its physical shelf location. Adding a book validates the shelf's remaining capacity and automatically reduces it as the shelf fills up.
 
 ### 👤 User Management
 Add, view, search, update, and remove library members.
@@ -60,10 +63,16 @@ Master
            └── Shelf
 ```
 
-Each level is modeled as its own class, so any book can be traced to its exact physical spot on a shelf.
+Each level is modeled as its own class, so any book can be traced to its exact physical spot on a shelf. Shelf capacity is tracked and decremented as it's filled, preventing overfilled shelves.
 
 ### 🔄 Transaction Management
 Borrow and return books with automatic availability tracking, plus search and full transaction history.
+
+### 🛠️ Self-Setting-Up Database
+On first run, the app creates its own MySQL database and every required table automatically — nothing needs to be created manually beforehand.
+
+### 🛡️ Defensive Error Handling
+Every user input and database operation across the entire service layer is wrapped in try/except, with automatic rollback on failure, so invalid input or database errors never crash the app.
 
 ---
 
@@ -86,10 +95,16 @@ Borrow and return books with automatic availability tracking, plus search and fu
         ┌──────────┐     ┌──────────┐     ┌──────────┐
         │  Models  │     │ Database │     │  CRUD    │
         │          │     │  (MySQL) │     │Operations│
-        └──────────┘     └──────────┘     └──────────┘
+        └──────────┘     └────┬─────┘     └──────────┘
+                               │
+                               ▼
+                        ┌──────────────┐
+                        │ config/schema │
+                        │ Table setup   │
+                        └──────────────┘
 ```
 
-The CLI layer never talks to the database directly — every request flows through the `Library` service, which coordinates the data models and the MySQL connection. This keeps the code testable and easy to extend.
+The CLI layer never talks to the database directly — every request flows through the `Library` service, which coordinates the data models and the MySQL connection. Database connection setup and schema (table) creation are kept in separate config modules, keeping the code testable and easy to extend.
 
 ---
 
@@ -99,8 +114,9 @@ The CLI layer never talks to the database directly — every request flows throu
 Library-Management-System/
 │
 ├── config/
-│   ├── db.py           # MySQL connection setup
-│   └── confiq.py        # App configuration
+│   ├── db.py            # MySQL connection + database creation
+│   ├── schema.py         # All CREATE TABLE definitions
+│   └── confiq.py         # App configuration (env vars)
 │
 ├── models/
 │   ├── book.py
@@ -112,11 +128,11 @@ Library-Management-System/
 │   └── transaction.py
 │
 ├── services/
-│   └── library.py       # Core business logic
+│   └── library.py        # Core business logic (with full error handling)
 │
 ├── .env.example
 ├── .gitignore
-├── main.py               # CLI entry point
+├── main.py                # CLI entry point
 └── README.md
 ```
 
@@ -140,7 +156,52 @@ Every book is linked to a `master_id`, which resolves to a specific **Row → Ra
 
 ---
 
+## Automatic Schema Creation
+
+`config/db.py` and `config/schema.py` together mean you never need to run SQL by hand:
+
+1. **`config/db.py`** connects to the MySQL server (no database selected) and runs `CREATE DATABASE IF NOT EXISTS`.
+2. It then reconnects with that database selected, producing the shared `connection` and `cursor` used everywhere.
+3. **`config/schema.py`** defines `create_tables(connection, cursor)`, which runs `CREATE TABLE IF NOT EXISTS` for every table in the correct dependency order:
+
+   ```
+   row_table → rack → shelf → master → books
+                                users → transactions
+   ```
+
+4. `db.py` calls `create_tables()` automatically the moment it's imported.
+
+So the first time you run `main.py` against a fresh MySQL server, the database and every table are created for you. On every later run, the same calls simply verify the tables already exist and the app continues straight to the menu — nothing is dropped or duplicated.
+
+---
+
+## Error Handling
+
+Every method in `services/library.py` follows the same defensive pattern:
+
+- **User input** (`int(input(...))`, etc.) is wrapped in `try/except ValueError`, so non-numeric input prints a clear message instead of crashing.
+- **Database operations** are wrapped in `try/except Exception` with `connection.rollback()` on failure, so a failed query never leaves partially-committed data.
+- **Shelf capacity** is validated before inserting a book (quantity must be positive and within the shelf's remaining capacity) and is automatically decremented after a successful insert.
+
+---
+
 ## Core Workflows
+
+### Adding a Book
+
+```
+Select Shelf → Check Remaining Capacity
+                        │
+              ┌─────────┴─────────┐
+              ▼                   ▼
+       Exceeds Capacity      Fits on Shelf
+                                   │
+                                   ▼
+                          Insert Book Record
+                                   │
+                                   ▼
+                    Reduce Shelf's Remaining Capacity
+```
 
 ### Borrowing a Book
 
@@ -202,14 +263,16 @@ python --version
 ### 3. Install dependencies
 
 ```bash
-pip install mysql-connector-python
+pip install mysql-connector-python python-dotenv
 ```
 
-### 4. Set up the database
+### 4. Configure your database credentials
 
-Create a MySQL database and configure your connection using the `.env.example` file as a reference.
+Copy `.env.example` to `.env` and fill in your MySQL credentials — see [Environment Configuration](#environment-configuration).
 
 > ⚠️ **Never commit real database credentials to GitHub.**
+
+You do **not** need to manually create the database or tables — the app creates them automatically on first run (see [Automatic Schema Creation](#automatic-schema-creation)).
 
 ### 5. Run the application
 
@@ -224,10 +287,10 @@ python main.py
 Copy `.env.example` to `.env` and fill in your own values:
 
 ```env
-DB_HOST=localhost
-DB_USER=your_username
-DB_PASSWORD=your_password
-DB_NAME=your_database
+LIBRARY_DB_HOST=localhost
+LIBRARY_DB_USER=your_username
+LIBRARY_DB_PASSWORD=your_password
+LIBRARY_DB_NAME=your_database
 ```
 
 ---
@@ -258,7 +321,9 @@ Location
 - Integrating Python with MySQL for persistent, relational data storage
 - Designing and implementing CRUD workflows end-to-end
 - Modeling real-world hierarchies (Row → Rack → Shelf) in code
-- Separating business logic, models, and database access cleanly
+- Separating business logic, models, schema definition, and database access cleanly
+- Automating database/table setup so the app is runnable with zero manual SQL
+- Writing defensive, production-style error handling around user input and database calls
 - Managing configuration securely with environment variables
 
 ---
