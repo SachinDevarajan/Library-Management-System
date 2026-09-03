@@ -145,7 +145,7 @@ class Library:
         print(f"Quantity    : {row[5]}")
         print(f"Available   : {row[6]}")
         print(f"Master ID   : {row[7]}")
-        print("---------------------")
+        print("-------------------------")
 
     def update_book(self):
         try:
@@ -225,7 +225,8 @@ class Library:
 
                     case 5:
                         publisher = input( "Enter New Publisher : " )
-                        cursor.execute("""UPDATE books SET publisher = %s WHERE book_id = %s """, (publisher, book_id))
+                        cursor.execute("""UPDATE books SET publisher = %s WHERE book_id = %s """, 
+                                       (publisher, book_id))
                         connection.commit()
                         print("Publisher Updated Successfully")
 
@@ -273,6 +274,7 @@ class Library:
 
                     case _:
                         print("Invalid Choice")
+
             except Exception as e:
                 connection.rollback()
                 print("Error updating book :", e)
@@ -428,6 +430,7 @@ class Library:
                         return
                     case _:
                         print("Invalid Selection")
+
             except Exception as e:
                 connection.rollback()
                 print("Error updating user :", e)
@@ -466,6 +469,7 @@ class Library:
         except Exception as e:
             connection.rollback()
             print("Error removing user :", e)
+
 
     """
     Borrow & Return Transaction
@@ -849,6 +853,7 @@ class Library:
                         print("Invalid Chice")
             except ValueError as e:
                 print("Invalid input :", e)
+
             except Exception as e:
                 connection.rollback()
                 print("Error updating rack :", e)
@@ -881,6 +886,7 @@ class Library:
             cursor.execute(query,(rack_id,))
             connection.commit()
             print("Rack Deleted Successfully")
+
         except Exception as e:
             connection.rollback()
             print("Error deleting rack :", e)
@@ -908,6 +914,7 @@ class Library:
             cursor.execute(query,(rack_id,capacity))
             connection.commit()
             print("Shelf Added Successfully")
+
         except Exception as e:
             connection.rollback()
             print("Error adding shelf :", e)
@@ -1065,6 +1072,7 @@ class Library:
             cursor.execute(query,(shelf_id,))
             connection.commit()
             print("Shelf Deleted Successfully")
+            
         except Exception as e:
             connection.rollback()
             print("Error deleting shelf :", e)
